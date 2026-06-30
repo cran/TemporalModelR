@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>2. Preprocessing temporally explicit data</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { display: inline-block; text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">2. Preprocessing temporally explicit
+data</h1>
+
+
+
+<hr>
+<div id="summary" class="section level1">
+<h1>Summary</h1>
+<ul>
+<li><a href="#sec-overview">Overview</a></li>
+<li><a href="#sec-align">Aligning rasters</a></li>
+<li><a href="#sec-rarefy">Spatiotemporal rarefaction</a></li>
+<li><a href="#sec-extract">Temporally explicit extraction</a></li>
+<li><a href="#sec-scale">Scaling rasters</a></li>
+<li><a href="#sec-partition">Spatiotemporal partitioning</a></li>
+<li><a href="#sec-absences">Generating pseudoabsences</a></li>
+<li><a href="#sec-outputs">Outputs ready for modeling</a></li>
+</ul>
+<hr>
+</div>
+<div id="sec-overview" class="section level1">
+<h1>Overview</h1>
+<p>The preprocessing phase of TemporalModelR takes raw occurrence
+records and environmental rasters and produces the structured inputs
+that the modeling functions expect. Six functions cover this phase, and
+they are typically run in order:</p>
+<ol style="list-style-type: decimal">
+<li><code>raster_align()</code> - reproject and mask all rasters to a
+common reference grid.</li>
+<li><code>spatiotemporal_rarefaction()</code> - subset occurrence points
+to one per pixel per time step.</li>
+<li><code>temporally_explicit_extraction()</code> - extract
+environmental values matched to each point’s observation time.</li>
+<li><code>scale_rasters()</code> - z-score rasters using the
+per-variable means and SDs from extraction. This step is optional, but
+should be applied for models sensitive to consistent scaling in
+predictor variables. If not, raw values and aligned rasters may be
+used.</li>
+<li><code>spatiotemporal_partition()</code> - assign points to single
+fold, spatial, temporal, spatiotemporal, or random cross-validation
+folds.</li>
+<li><code>generate_absences()</code> - produce fold-stratified
+pseudoabsences for presence/absence models.</li>
+</ol>
+<p>This vignette walks through each step using the bundled synthetic
+dataset described in the <a href="https://cjhughes926.github.io/TemporalModelR/articles/V1_dataset.html">About
+the Example Dataset</a> vignette. Read that vignette first if you have
+not already, as it explains the structure of the raw rasters and
+occurrence points used here. We use the <strong>seasonal (compound
+time-step) workflow</strong> throughout, with <code>forest_cover</code>
+(annual), <code>prseas</code> (year-season), and <code>elevation</code>
+(static) as predictors. The annual workflow is identical apart from
+substituting <code>pr_ann</code> for <code>prseas</code> and dropping
+<code>season</code> from the time columns.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(TemporalModelR)</span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">library</span>(terra)</span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a><span class="fu">library</span>(sf)</span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a>raw_dir  <span class="ot">&lt;-</span> <span class="fu">system.file</span>(<span class="st">&quot;extdata/rasters_raw&quot;</span>, <span class="at">package =</span> <span class="st">&quot;TemporalModelR&quot;</span>)</span>
+<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a>pts_file <span class="ot">&lt;-</span> <span class="fu">system.file</span>(<span class="st">&quot;extdata/points/synthetic_occurrence_points.csv&quot;</span>,</span>
+<span id="cb1-8"><a href="#cb1-8" tabindex="-1"></a>                        <span class="at">package =</span> <span class="st">&quot;TemporalModelR&quot;</span>)</span>
+<span id="cb1-9"><a href="#cb1-9" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" tabindex="-1"></a>ref_file <span class="ot">&lt;-</span> <span class="fu">file.path</span>(raw_dir, <span class="st">&quot;elevation.tif&quot;</span>)</span>
+<span id="cb1-11"><a href="#cb1-11" tabindex="-1"></a>study_crs <span class="ot">&lt;-</span> sf<span class="sc">::</span><span class="fu">st_crs</span>(terra<span class="sc">::</span><span class="fu">rast</span>(ref_file))</span></code></pre></div>
+<p><br></p>
+</div>
+<div id="sec-align" class="section level1">
+<h1>Aligning rasters</h1>
+<p><code>raster_align()</code> standardizes every raster in a directory
+to a single reference grid by reprojecting, resampling, and masking.
+This is essential because downstream functions assume all environmental
+layers share identical CRS, resolution, and extent. Even small
+differences are enough to misalign extraction at the pixel level. With
+the bundled dataset the raw rasters are already on the same grid, but we
+run the alignment step to show the call pattern.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>aligned_dir <span class="ot">&lt;-</span> <span class="fu">file.path</span>(<span class="fu">tempdir</span>(), <span class="st">&quot;rasters_aligned&quot;</span>)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="fu">raster_align</span>(</span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>  <span class="at">input_dir        =</span> raw_dir,</span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>  <span class="at">output_dir       =</span> aligned_dir,</span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>  <span class="at">reference_raster =</span> ref_file,</span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a>  <span class="at">resample_method  =</span> <span class="st">&quot;bilinear&quot;</span>,</span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a>  <span class="at">overwrite        =</span> <span class="cn">TRUE</span></span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a>)</span></code></pre></div>
+<p><code>resample_method = &quot;bilinear&quot;</code> is appropriate for
+continuous variables like elevation and precipitation. Use
+<code>&quot;near&quot;</code> for categorical rasters such as land cover classes;
+bilinear interpolation between class codes would incorrectly generate
+codes that do not exist.</p>
+<p>We now have a directory of aligned rasters which can be used in
+downstream analyses.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>aligned_dir <span class="ot">&lt;-</span> <span class="fu">system.file</span>(<span class="st">&quot;extdata/rasters_aligned&quot;</span>, <span class="at">package =</span> <span class="st">&quot;TemporalModelR&quot;</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a><span class="fu">list.files</span>(aligned_dir, <span class="at">pattern =</span> <span class="st">&quot;</span><span class="sc">\\</span><span class="st">.tif$&quot;</span>)[<span class="dv">1</span><span class="sc">:</span><span class="dv">6</span>]</span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a><span class="co">#&gt; [1] &quot;elevation_Masked_Updated.tif&quot;       &quot;forest_cover_10_Masked_Updated.tif&quot;</span></span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a><span class="co">#&gt; [3] &quot;forest_cover_11_Masked_Updated.tif&quot; &quot;forest_cover_12_Masked_Updated.tif&quot;</span></span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a><span class="co">#&gt; [5] &quot;forest_cover_13_Masked_Updated.tif&quot; &quot;forest_cover_14_Masked_Updated.tif&quot;</span></span></code></pre></div>
+<p><br></p>
+</div>
+<div id="sec-rarefy" class="section level1">
+<h1>Spatiotemporal rarefaction</h1>
+<p><code>spatiotemporal_rarefaction()</code> reduces sampling bias and
+pseudoreplication by retaining one occurrence per pixel per unique
+time-step combination. The produces an only spatially rarefied table
+(one point per pixel, regardless of time), and when
+<code>time_cols</code> is provided, it additionally produces a
+spatiotemporally rarefied table that preserves multiple observations
+from the same pixel when they fall in different time steps.</p>
+<p>This distinction matters for temporally explicit modeling. A static
+workflow would discard the second observation at the same pixel as
+redundant. A temporally explicit workflow keeps it, correctly
+recognizing that the environment at that pixel may have changed between
+the two observation times, making the second record carry unique
+information about the species’ niche.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>rare_dir <span class="ot">&lt;-</span> <span class="fu">file.path</span>(<span class="fu">tempdir</span>(), <span class="st">&quot;rarefied&quot;</span>)</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>rare_out <span class="ot">&lt;-</span> <span class="fu">spatiotemporal_rarefaction</span>(</span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>  <span class="at">points_sp        =</span> pts_file,</span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>  <span class="at">output_dir       =</span> rare_dir,</span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a>  <span class="at">reference_raster =</span> ref_file,</span>
+<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a>  <span class="at">time_cols        =</span> <span class="fu">c</span>(<span class="st">&quot;year&quot;</span>, <span class="st">&quot;season&quot;</span>),</span>
+<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a>  <span class="at">xcol             =</span> <span class="st">&quot;x&quot;</span>,</span>
+<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a>  <span class="at">ycol             =</span> <span class="st">&quot;y&quot;</span>,</span>
+<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a>  <span class="at">points_crs       =</span> study_crs,</span>
+<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a>  <span class="at">output_prefix    =</span> <span class="st">&quot;Pts_seasonal&quot;</span>,</span>
+<span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a>  <span class="at">verbose          =</span> <span class="cn">FALSE</span></span>
+<span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a>)</span>
+<span id="cb4-14"><a href="#cb4-14" tabindex="-1"></a></span>
+<span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a>rare_out<span class="sc">$</span>input_points</span>
+<span id="cb4-16"><a href="#cb4-16" tabindex="-1"></a><span class="co">#&gt; [1] 150</span></span>
+<span id="cb4-17"><a href="#cb4-17" tabindex="-1"></a></span>
+<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a>rare_out<span class="sc">$</span>spatial_points</span>
+<span id="cb4-19"><a href="#cb4-19" tabindex="-1"></a><span class="co">#&gt; [1] 84</span></span>
+<span id="cb4-20"><a href="#cb4-20" tabindex="-1"></a></span>
+<span id="cb4-21"><a href="#cb4-21" tabindex="-1"></a>rare_out<span class="sc">$</span>spatiotemporal_points</span>
+<span id="cb4-22"><a href="#cb4-22" tabindex="-1"></a><span class="co">#&gt; [1] 150</span></span></code></pre></div>
+<p>The spatial-only count is the number of unique pixels containing at
+least one record, retaining only 84 points of the starting 150. The
+spatiotemporal count is the number of unique pixel-year-season
+combinations and so will typically be larger whenever the dataset
+contains repeat visits to the same pixel in different time steps. In
+this instance, all 150 starting points contain unique pixel-year-season
+combinations.</p>
+<p>Two CSVs are written to <code>output_dir</code>. The spatiotemporal
+one is what we pass forward; the spatial-only file is retained for
+reference and for users who want a static comparison:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>rare_out<span class="sc">$</span>files_created</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a><span class="co">#&gt; $spatiotemporal</span></span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a><span class="co">#&gt; [1] &quot;C:\\Users\\Conno\\AppData\\Local\\Temp\\Rtmp4eKei8/rarefied/Pts_seasonal_OnePerPixPerTimeStep.csv&quot;</span></span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a><span class="co">#&gt; $spatial</span></span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a><span class="co">#&gt; [1] &quot;C:\\Users\\Conno\\AppData\\Local\\Temp\\Rtmp4eKei8/rarefied/Pts_seasonal_OnePerPix.csv&quot;</span></span></code></pre></div>
+<p>If we wanted to focus on annual variation rather than both annual and
+seasonal variation, we could instead run this focusing only ‘year’ as
+our time_col of interest. This would instead save all unique pixel-year
+combinations, but assume locations from the same year and location but
+different seasons share no new data.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>rare_dir <span class="ot">&lt;-</span> <span class="fu">file.path</span>(<span class="fu">tempdir</span>(), <span class="st">&quot;rarefied&quot;</span>)</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>rare_out_annual <span class="ot">&lt;-</span> <span class="fu">spatiotemporal_rarefaction</span>(</span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>  <span class="at">points_sp        =</span> pts_file,</span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>  <span class="at">output_dir       =</span> rare_dir,</span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>  <span class="at">reference_raster =</span> ref_file,</span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>  <span class="at">time_cols        =</span> <span class="st">&quot;year&quot;</span>,</span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>  <span class="at">xcol             =</span> <span class="st">&quot;x&quot;</span>,</span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a>  <span class="at">ycol             =</span> <span class="st">&quot;y&quot;</span>,</span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a>  <span class="at">points_crs       =</span> study_crs,</span>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a>  <span class="at">output_prefix    =</span> <span class="st">&quot;Pts_ann&quot;</span>,</span>
+<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a>  <span class="at">verbose          =</span> <span class="cn">FALSE</span></span>
+<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a>)</span>
+<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a></span>
+<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a>rare_out_annual<span class="sc">$</span>input_points</span>
+<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a><span class="co">#&gt; [1] 150</span></span>
+<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a></span>
+<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a>rare_out_annual<span class="sc">$</span>spatial_points</span>
+<span id="cb6-19"><a href="#cb6-19" tabindex="-1"></a><span class="co">#&gt; [1] 84</span></span>
+<span id="cb6-20"><a href="#cb6-20" tabindex="-1"></a></span>
+<span id="cb6-21"><a href="#cb6-21" tabindex="-1"></a>rare_out_annual<span class="sc">$</span>spatiotemporal_points</span>
+<span id="cb6-22"><a href="#cb6-22" tabindex="-1"></a><span class="co">#&gt; [1] 144</span></span></code></pre></div>
+<p>This still retains many more points (144) than just the spatially
+explicit extraction.</p>
+<p><br></p>
+</div>
+<div id="sec-extract" class="section level1">
+<h1>Temporally explicit extraction</h1>
+<p><code>temporally_explicit_extraction()</code> temporally aligns the
+raster dataset with the temporal columns of the now rarefied species
+occurrence dataset. For each occurrence record it extracts environmental
+values from the raster matched to that point’s <em>observation
+time</em>, rather than from a long-term average. The pairing between
+point and raster is driven by <code>variable_patterns</code>: clean
+variable names on the left, filename patterns with time placeholders on
+the right.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>ext_dir <span class="ot">&lt;-</span> <span class="fu">file.path</span>(<span class="fu">tempdir</span>(), <span class="st">&quot;extracted&quot;</span>)</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a></span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>ext_out <span class="ot">&lt;-</span> <span class="fu">temporally_explicit_extraction</span>(</span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>  <span class="at">points_sp           =</span> rare_out<span class="sc">$</span>files_created<span class="sc">$</span>spatiotemporal,</span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>  <span class="at">raster_dir          =</span> aligned_dir,</span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>  <span class="at">variable_patterns   =</span> <span class="fu">c</span>(</span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a>    <span class="st">&quot;elevation&quot;</span>    <span class="ot">=</span> <span class="st">&quot;elevation&quot;</span>,</span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a>    <span class="st">&quot;forest_cover&quot;</span> <span class="ot">=</span> <span class="st">&quot;forest_cover_YEAR&quot;</span>,</span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a>    <span class="st">&quot;prseas&quot;</span>       <span class="ot">=</span> <span class="st">&quot;prseas_YEAR_SEASON&quot;</span></span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a>  ),</span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a>  <span class="at">time_cols           =</span> <span class="fu">c</span>(<span class="st">&quot;year&quot;</span>, <span class="st">&quot;season&quot;</span>),</span>
+<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a>  <span class="at">xcol                =</span> <span class="st">&quot;X&quot;</span>,</span>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a>  <span class="at">ycol                =</span> <span class="st">&quot;Y&quot;</span>,</span>
+<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a>  <span class="at">points_crs          =</span> study_crs,</span>
+<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a>  <span class="at">output_dir          =</span> ext_dir,</span>
+<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a>  <span class="at">output_prefix       =</span> <span class="st">&quot;extracted_seasonal&quot;</span>,</span>
+<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a>  <span class="at">save_raw            =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a>  <span class="at">save_scaled         =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a>  <span class="at">save_scaling_params =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a>  <span class="at">verbose             =</span> <span class="cn">FALSE</span></span>
+<span id="cb7-21"><a href="#cb7-21" tabindex="-1"></a>)</span>
+<span id="cb7-22"><a href="#cb7-22" tabindex="-1"></a></span>
+<span id="cb7-23"><a href="#cb7-23" tabindex="-1"></a><span class="fu">head</span>(ext_out<span class="sc">$</span>raw_values)</span>
+<span id="cb7-24"><a href="#cb7-24" tabindex="-1"></a><span class="co">#&gt;   year season pixel_id elevation forest_cover prseas   x    y</span></span>
+<span id="cb7-25"><a href="#cb7-25" tabindex="-1"></a><span class="co">#&gt; 1   11 Spring        5      1247        0.846    310 450 1450</span></span>
+<span id="cb7-26"><a href="#cb7-26" tabindex="-1"></a><span class="co">#&gt; 2    4 Autumn        5      1247        0.856    370 450 1450</span></span>
+<span id="cb7-27"><a href="#cb7-27" tabindex="-1"></a><span class="co">#&gt; 3    7 Autumn        5      1247        0.825    370 450 1450</span></span>
+<span id="cb7-28"><a href="#cb7-28" tabindex="-1"></a><span class="co">#&gt; 4   13 Spring        6      1290        0.844    364 550 1450</span></span>
+<span id="cb7-29"><a href="#cb7-29" tabindex="-1"></a><span class="co">#&gt; 5   15 Autumn        6      1290        0.809    370 550 1450</span></span>
+<span id="cb7-30"><a href="#cb7-30" tabindex="-1"></a><span class="co">#&gt; 6    5 Autumn        6      1290        0.903    340 550 1450</span></span></code></pre></div>
+<p>A few details worth highlighting:</p>
+<ul>
+<li><code>&quot;elevation&quot; = &quot;elevation&quot;</code> is a static pattern with no
+placeholder, so every record is matched to the single
+<code>elevation.tif</code> raster.</li>
+<li><code>&quot;forest_cover&quot; = &quot;forest_cover_YEAR&quot;</code> substitutes each
+record’s <code>year</code> value for <code>YEAR</code>, so a record
+where the year column has a value of 7 is matched to the raster
+<code>forest_cover_7.tif</code>.</li>
+<li><code>&quot;prseas&quot; = &quot;prseas_YEAR_SEASON&quot;</code> substitutes both
+<code>year</code> and <code>season</code>, so a record where the year
+column is 3 and the season column = spring is matched to the raster
+<code>prseas_3_Spring.tif</code>.</li>
+<li>We could also include <code>&quot;pr_ann&quot; = &quot;pr_ann_YEAR&quot;</code> to match
+with annual measures of precipitation.</li>
+</ul>
+<p>The same call generates three outputs:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>ext_out<span class="sc">$</span>files_created</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a><span class="co">#&gt; $raw</span></span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a><span class="co">#&gt; [1] &quot;C:\\Users\\Conno\\AppData\\Local\\Temp\\Rtmp4eKei8/extracted/extracted_seasonal_Raw_Values.csv&quot;</span></span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a><span class="co">#&gt; $scaled</span></span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a><span class="co">#&gt; [1] &quot;C:\\Users\\Conno\\AppData\\Local\\Temp\\Rtmp4eKei8/extracted/extracted_seasonal_Scaled_Values.csv&quot;</span></span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a><span class="co">#&gt; $scaling_params</span></span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a><span class="co">#&gt; [1] &quot;C:\\Users\\Conno\\AppData\\Local\\Temp\\Rtmp4eKei8/extracted/extracted_seasonal_Scaling_Parameters.csv&quot;</span></span></code></pre></div>
+<p>The raw values file is what models that don’t need scaling will
+consume. The scaled file applies a z-score per variable using the means
+and SDs computed across all records. The scaling parameters file records
+those means and SDs so the same transformation can be applied to the
+prediction rasters, if necessary.</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>ext_out<span class="sc">$</span>scaling_params</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a><span class="co">#&gt;       variable         mean           sd</span></span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a><span class="co">#&gt; 1    elevation 1936.4933333 462.38550909</span></span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a><span class="co">#&gt; 2 forest_cover    0.8641333   0.04070431</span></span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a><span class="co">#&gt; 3       prseas  317.3533333  73.04610447</span></span></code></pre></div>
+<p>Z-scoring matters when an algorithm is sensitive to variable scale,
+such as those that rely on Euclidean distances and will misbehave if one
+variable’s units dwarf the others (e.g. Temperature running from -10 to
+38 C compared to precipitation running from 0 to 3000 mm. Use the
+scaling parameters CSV when running <code>scale_rasters()</code> so the
+rasters and the extracted point data share the same transformation.</p>
+<p><br></p>
+</div>
+<div id="sec-scale" class="section level1">
+<h1>Scaling rasters</h1>
+<p><code>scale_rasters()</code> z-scores every raster in a directory
+using the per-variable means and SDs from extraction. The transformation
+is <code>(value - mean) / sd</code>, applied pixel-wise.</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>scaled_dir <span class="ot">&lt;-</span> <span class="fu">file.path</span>(<span class="fu">tempdir</span>(), <span class="st">&quot;rasters_scaled&quot;</span>)</span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a></span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a><span class="fu">scale_rasters</span>(</span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a>  <span class="at">input_dir           =</span> aligned_dir,</span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a>  <span class="at">output_dir          =</span> scaled_dir,</span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a>  <span class="at">scaling_params_file =</span> ext_out<span class="sc">$</span>files_created<span class="sc">$</span>scaling_params,</span>
+<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a>  <span class="at">variable_patterns   =</span> <span class="fu">c</span>(</span>
+<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a>    <span class="st">&quot;elevation&quot;</span>    <span class="ot">=</span> <span class="st">&quot;elevation&quot;</span>,</span>
+<span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a>    <span class="st">&quot;forest_cover&quot;</span> <span class="ot">=</span> <span class="st">&quot;forest_cover_YEAR&quot;</span>,</span>
+<span id="cb10-10"><a href="#cb10-10" tabindex="-1"></a>    <span class="st">&quot;prseas&quot;</span>       <span class="ot">=</span> <span class="st">&quot;prseas_YEAR_SEASON&quot;</span></span>
+<span id="cb10-11"><a href="#cb10-11" tabindex="-1"></a>  ),</span>
+<span id="cb10-12"><a href="#cb10-12" tabindex="-1"></a>  <span class="at">time_cols           =</span> <span class="fu">c</span>(<span class="st">&quot;year&quot;</span>, <span class="st">&quot;season&quot;</span>),</span>
+<span id="cb10-13"><a href="#cb10-13" tabindex="-1"></a>  <span class="at">overwrite           =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb10-14"><a href="#cb10-14" tabindex="-1"></a>  <span class="at">verbose             =</span> <span class="cn">FALSE</span></span>
+<span id="cb10-15"><a href="#cb10-15" tabindex="-1"></a>)</span></code></pre></div>
+<p><code>variable_patterns</code> mirrors the extraction call. For each
+variable in the scaling parameters file, every matching raster in
+<code>input_dir</code> is z-scored with the same mean and SD, this
+guarantees the rasters and the points share a consistent
+transformation.</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a>scaled_dir <span class="ot">&lt;-</span> <span class="fu">system.file</span>(<span class="st">&quot;extdata/rasters_scaled&quot;</span>, <span class="at">package =</span> <span class="st">&quot;TemporalModelR&quot;</span>)</span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a></span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a><span class="fu">list.files</span>(scaled_dir, <span class="at">pattern =</span> <span class="st">&quot;</span><span class="sc">\\</span><span class="st">.tif$&quot;</span>)[<span class="dv">1</span><span class="sc">:</span><span class="dv">6</span>]</span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a><span class="co">#&gt; [1] &quot;elevation_Scaled.tif&quot;       &quot;forest_cover_10_Scaled.tif&quot;</span></span>
+<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a><span class="co">#&gt; [3] &quot;forest_cover_11_Scaled.tif&quot; &quot;forest_cover_12_Scaled.tif&quot;</span></span>
+<span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a><span class="co">#&gt; [5] &quot;forest_cover_13_Scaled.tif&quot; &quot;forest_cover_14_Scaled.tif&quot;</span></span></code></pre></div>
+<p>We now have a directory of scaled rasters which we’ll use for future
+analyses.</p>
+<p><br></p>
+</div>
+<div id="sec-partition" class="section level1">
+<h1>Spatiotemporal partitioning</h1>
+<p><code>spatiotemporal_partition()</code> assigns each occurrence
+record to a cross-validation fold which will be used to create training
+and testing datasets to build and assess our temporally explicit models.
+The function supports five modes:</p>
+<ul>
+<li><strong>Single fold.</strong> All points used for both training and
+testing. No held-out validation. Useful for a final production model
+after cross validated quality has been established, or when sample sizes
+are too small for splitting.</li>
+<li><strong>Random.</strong> Folds are random shuffles with no spatial
+or temporal structure. Useful as a naive baseline.</li>
+<li><strong>Spatial-only.</strong> Recursive k-d tree bisection produces
+geographically distinct contiguous regions, one per fold. Use when you
+want to test geographic transferability and don’t have time structure to
+exploit.</li>
+<li><strong>Temporal-only.</strong> Each fold spans the full study area
+but covers a distinct slice of the time series, defined by
+quantile-based breaks. Use to test temporal transferability.</li>
+<li><strong>Spatiotemporal.</strong> Combines the two:
+<code>n_spatial_folds</code> are geographically distinct folds and
+<code>n_temporal_folds</code> are time-restricted folds. Tests both
+kinds of transferability simultaneously.</li>
+</ul>
+<p>We use the spatiotemporal design with two folds in each pool. The
+function requires the scaled (or raw) extracted points as input, a
+polygon defining the study area, and a single <code>time_cols</code>
+column (unlike the multi-column placeholders elsewhere; see
+<code>?spatiotemporal_partition</code> for the rationale).</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a>ext_scaled_file <span class="ot">&lt;-</span> <span class="fu">system.file</span>(</span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a>  <span class="st">&quot;extdata/points/extracted_seasonal_Scaled_Values.csv&quot;</span>,</span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a>  <span class="at">package =</span> <span class="st">&quot;TemporalModelR&quot;</span></span>
+<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a>)</span>
+<span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a></span>
+<span id="cb12-6"><a href="#cb12-6" tabindex="-1"></a>study_area_sf <span class="ot">&lt;-</span> sf<span class="sc">::</span><span class="fu">st_as_sf</span>(sf<span class="sc">::</span><span class="fu">st_as_sfc</span>(</span>
+<span id="cb12-7"><a href="#cb12-7" tabindex="-1"></a>  sf<span class="sc">::</span><span class="fu">st_bbox</span>(<span class="fu">c</span>(<span class="at">xmin =</span> <span class="dv">0</span>, <span class="at">xmax =</span> <span class="dv">3000</span>, <span class="at">ymin =</span> <span class="dv">0</span>, <span class="at">ymax =</span> <span class="dv">1500</span>),</span>
+<span id="cb12-8"><a href="#cb12-8" tabindex="-1"></a>              <span class="at">crs =</span> study_crs)</span>
+<span id="cb12-9"><a href="#cb12-9" tabindex="-1"></a>))</span>
+<span id="cb12-10"><a href="#cb12-10" tabindex="-1"></a></span>
+<span id="cb12-11"><a href="#cb12-11" tabindex="-1"></a>partition <span class="ot">&lt;-</span> <span class="fu">spatiotemporal_partition</span>(</span>
+<span id="cb12-12"><a href="#cb12-12" tabindex="-1"></a>  <span class="at">reference_shapefile_path =</span> study_area_sf,</span>
+<span id="cb12-13"><a href="#cb12-13" tabindex="-1"></a>  <span class="at">points_file_path         =</span> ext_scaled_file,</span>
+<span id="cb12-14"><a href="#cb12-14" tabindex="-1"></a>  <span class="at">xcol                     =</span> <span class="st">&quot;x&quot;</span>,</span>
+<span id="cb12-15"><a href="#cb12-15" tabindex="-1"></a>  <span class="at">ycol                     =</span> <span class="st">&quot;y&quot;</span>,</span>
+<span id="cb12-16"><a href="#cb12-16" tabindex="-1"></a>  <span class="at">points_crs               =</span> study_crs,</span>
+<span id="cb12-17"><a href="#cb12-17" tabindex="-1"></a>  <span class="at">time_cols                =</span> <span class="st">&quot;year&quot;</span>,</span>
+<span id="cb12-18"><a href="#cb12-18" tabindex="-1"></a>  <span class="at">n_spatial_folds          =</span> <span class="dv">2</span>,</span>
+<span id="cb12-19"><a href="#cb12-19" tabindex="-1"></a>  <span class="at">n_temporal_folds         =</span> <span class="dv">2</span>,</span>
+<span id="cb12-20"><a href="#cb12-20" tabindex="-1"></a>  <span class="at">max_attempts =</span> <span class="dv">10</span>,</span>
+<span id="cb12-21"><a href="#cb12-21" tabindex="-1"></a>  <span class="at">max_imbalance =</span> <span class="fl">0.15</span>,</span>
+<span id="cb12-22"><a href="#cb12-22" tabindex="-1"></a>  <span class="at">create_plot              =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb12-23"><a href="#cb12-23" tabindex="-1"></a>  <span class="at">verbose                  =</span> <span class="cn">FALSE</span></span>
+<span id="cb12-24"><a href="#cb12-24" tabindex="-1"></a>)</span></code></pre></div>
+<p><img role="img" aria-label src="data:image/png;base64,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" alt width="95%" /><img role="img" aria-label src="data:image/png;base64,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" alt width="95%" /></p>
+<pre><code>#&gt; Spherical geometry (s2) switched off
+#&gt; Spherical geometry (s2) switched on</code></pre>
+<p><img role="img" aria-label src="data:image/png;base64,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" alt width="95%" /></p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a></span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a>partition<span class="sc">$</span>summary</span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a><span class="co">#&gt;                        parameter          value</span></span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a><span class="co">#&gt; 1                    total_folds              4</span></span>
+<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a><span class="co">#&gt; 2                n_spatial_folds              2</span></span>
+<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a><span class="co">#&gt; 3               n_temporal_folds              2</span></span>
+<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a><span class="co">#&gt; 4               n_balanced_folds              0</span></span>
+<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a><span class="co">#&gt; 5                 n_random_folds              0</span></span>
+<span id="cb14-9"><a href="#cb14-9" tabindex="-1"></a><span class="co">#&gt; 6                 partition_mode spatiotemporal</span></span>
+<span id="cb14-10"><a href="#cb14-10" tabindex="-1"></a><span class="co">#&gt; 7                   total_points            150</span></span>
+<span id="cb14-11"><a href="#cb14-11" tabindex="-1"></a><span class="co">#&gt; 8                 points_removed              0</span></span>
+<span id="cb14-12"><a href="#cb14-12" tabindex="-1"></a><span class="co">#&gt; 9               pct_rows_removed              0</span></span>
+<span id="cb14-13"><a href="#cb14-13" tabindex="-1"></a><span class="co">#&gt; 10           final_imbalance_pct          14.67</span></span>
+<span id="cb14-14"><a href="#cb14-14" tabindex="-1"></a><span class="co">#&gt; 11 temporal_partitioning_enabled           TRUE</span></span></code></pre></div>
+<p>The returned <code>points_sf</code> carries a <code>fold</code>
+column alongside the original predictor columns. Two of the four folds
+are geographically restricted but span the full time series; the other
+two overlap spatially and span the remainder of the study area but are
+restricted to a distinct time slice each.</p>
+<p>For partitioning purposes, time information must be encoded in a
+single column based on what temporal scale is relevant for the desired
+partitioning. Both example workflows in this package use the coarsest
+time scale for partitioning <code>time_cols = &quot;year&quot;</code> at this step
+(the season is preserved in the point data for later modeling and
+prediction, just not used for fold construction). If both year and
+season are conceptually meaningful for fold breaks, encode them into a
+single ordered numeric column before partitioning. Alternatively,
+partitioning could be done across seasons to view the environmental
+transferability of seasonal environmental values.</p>
+<p><br></p>
+</div>
+<div id="sec-absences" class="section level1">
+<h1>Generating pseudoabsences</h1>
+<p><code>generate_absences()</code> produces fold-stratified
+pseudoabsence/background points for presence/absence modeling.
+Pseudoabsences measure the environmental characteristics of locations
+not otherwise characterized by species occurrences and are essential for
+GLMs, GAMs, and random forests when no ‘true absence’ points exist. The
+hypervolume method is presence-only and does not need them.</p>
+<p>Three generation methods are supported:</p>
+<ul>
+<li><strong>Random.</strong> Uniform sampling across the study area with
+a small buffer around presences to avoid exact overlap.</li>
+<li><strong>Buffer.</strong> Sampling within a user-specified radius of
+presence locations. Useful when you want pseudoabsences from the same
+general environment as the presences, on the assumption that nearby
+unsampled locations are more likely to represent true absence than
+locations far from any survey effort.</li>
+<li><strong>Environmental.</strong> Cells outside the species’
+environmental tolerance envelope are identified as candidates, then
+k-means clustering selects a spatially representative subset. When
+<code>buffer_distance</code> is also supplied the environmental
+filtering is restricted to within that buffer, implementing the
+three-step approach of Senay et al. (2013).</li>
+</ul>
+<p>The function distributes pseudoabsences across folds and across time
+steps in proportion to the presences in each fold-time combination, so
+the potential environmental conditions experienced by each pseudoabsence
+match those experienced by the presences it complements.</p>
+<p>We use the buffer method with a 300 m radius (three pixels at the
+synthetic landscape’s 100 m resolution) and a 2:1
+pseudoabsence-to-presence ratio:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a>absences <span class="ot">&lt;-</span> <span class="fu">generate_absences</span>(</span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a>  <span class="at">partition_result         =</span> partition,</span>
+<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>  <span class="at">reference_shapefile_path =</span> study_area_sf,</span>
+<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a>  <span class="at">raster_dir               =</span> scaled_dir,</span>
+<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a>  <span class="at">variable_patterns        =</span> <span class="fu">c</span>(</span>
+<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a>    <span class="st">&quot;elevation&quot;</span>    <span class="ot">=</span> <span class="st">&quot;elevation&quot;</span>,</span>
+<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a>    <span class="st">&quot;forest_cover&quot;</span> <span class="ot">=</span> <span class="st">&quot;forest_cover_YEAR&quot;</span>,</span>
+<span id="cb15-8"><a href="#cb15-8" tabindex="-1"></a>    <span class="st">&quot;prseas&quot;</span>       <span class="ot">=</span> <span class="st">&quot;prseas_YEAR_SEASON&quot;</span></span>
+<span id="cb15-9"><a href="#cb15-9" tabindex="-1"></a>  ),</span>
+<span id="cb15-10"><a href="#cb15-10" tabindex="-1"></a>  <span class="at">method                   =</span> <span class="st">&quot;buffer&quot;</span>,</span>
+<span id="cb15-11"><a href="#cb15-11" tabindex="-1"></a>  <span class="at">buffer_distance          =</span> <span class="dv">300</span>,</span>
+<span id="cb15-12"><a href="#cb15-12" tabindex="-1"></a>  <span class="at">ratio                    =</span> <span class="dv">2</span>,</span>
+<span id="cb15-13"><a href="#cb15-13" tabindex="-1"></a>  <span class="at">time_cols                =</span> <span class="fu">c</span>(<span class="st">&quot;year&quot;</span>, <span class="st">&quot;season&quot;</span>),</span>
+<span id="cb15-14"><a href="#cb15-14" tabindex="-1"></a>  <span class="at">create_plot              =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb15-15"><a href="#cb15-15" tabindex="-1"></a>  <span class="at">plot_by_fold =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb15-16"><a href="#cb15-16" tabindex="-1"></a>  <span class="at">verbose                  =</span> <span class="cn">FALSE</span></span>
+<span id="cb15-17"><a href="#cb15-17" tabindex="-1"></a>)</span></code></pre></div>
+<p><img role="img" aria-label src="data:image/png;base64,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" alt width="95%" /><img role="img" aria-label src="data:image/png;base64,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" alt width="95%" /><img role="img" aria-label src="data:image/png;base64,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" alt width="95%" /><img role="img" aria-label src="data:image/png;base64,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" alt width="95%" /><img role="img" aria-label src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAArwAAAH0CAMAAADohw7tAAABNVBMVEUAAAAAABwAADgAADoAAGMAAGYAOIsAOjoAOmYAOpAAY2MAY7AAZrYcAAAcR20zABwzWn84AAA4ADg4AGM4i4s4i7A4i9Q6AAA6ADo6AGY6OgA6OmY6OpA6ZpA6ZrY6kLY6kNtHHABHbX9jAABjADhjAGNjY2NjsPdmAABmADpmAGZmOgBmOjpmkLZmtrZmtttmtv9tRxxtf39/bUd/f1p/f21/f3+LOACLODiLiziL1PeQOgCQOjqQZjqQkDqQkGaQttuQ29uQ2/+RicewYwCwiziw9/e2ZgC2Zjq2kDq2kGa2ttu227a229u22/+2/9u2///UizjU9/fbkDrbkGbbtmbbtpDb25Db///3sGP31Iv397D399T39/f8no3+e2P/bVL/tmb/25D/27b//7b//9v///8+mVg8AAAACXBIWXMAAA9hAAAPYQGoP6dpAAAR00lEQVR4nO3dC3/bVuGHcdGsLWXlUhjN1q6jY4wGCixclkLLoDSjYTBKurAtXRsHp4nf/0vgHN18JEuy5JvO7+j5fj7/OLElOf/y7PjoEjuaAKKivn8BYFHEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEC1nEexSlLh+6d188mt5xvhNdO3YeK/x8kK5++0mHJy1vseCg9KugBvEuEK9ZZTbeKNpt/6TEuwrE2z3es+3qeOtznEG8q0C8R9VDZkO8B1Ex3i07YfhqO7lth3hXgXiL8X51P4qu/vo4j/fikyh69/NCauPo6vZsvOntf29F0dadZ/aO12bVLbup9CEzYF+flLaYP13ybTJxNvH+xyx0J767boN/++d2dPWxvfvCfBdd/ai4hLtesIi3EO8/8glAEq8ZIctTAnPXb3bqRt6D6QzETi7SFd14C1ucPp35TyJmF8wmInYrdRuMbmVLZ4u8V15idioUGuLN5rw2BFPQtWcXn0XR3TRe8+D1Y/OtE+tRdL3yaINdJnngKFv/2eRL+20hXneLxafL1rRbNHcf2O9rN2i+T5awD/7k+PWOeQpnCWe9gBGvG29SWdzt9EucXR7r2fblw+p4zapmwa3H2XI2nKRJJ97CFp2ny1e6Hm9xN50W127QLuFu8OjOv90lnPUCRrxOvFmUR+kwllXqxnqQj2v5Hcnqdn5pR9R0Ejt2DmI48bpbdJ/O3Fx89Yl52b+e7bBl//VUbzCP1/ldnCWc9QJGvM6cd1pTtFsT79h+d14x502c3U9K3u0Wr/kN0jWn8SY3bTeY/G7TJabrBYx4K+OtHXmnM9xsNnlQPET2+q+34unv2Jlvthh5zfdbd/71dTptcGcT7TZojQtT3Gy9Vf97eYR4nXhNL/PmvHPjNc7vm7XSA2POIuOoNOd1ny4JbxyV5ryNG3TnvOPbjyfuEtP1VvqP5RfidQ+VVR9teP2oNILVThtsfMeTs52kzOgju+ufHWF4veN8P3O0YZzdfb1wLKFmgzOHL+yau84Sznob+mfsA/E2HudNdnzKL7/1c95sYN7ND7o6R2jj7gpbnD5dfvg3SfNWtmr1Bt14sw2ajRSWyNcLF/GWzrD9Kj1b5Zxhu/35Ttt4J1/a7G7nJ8TS02Rm92nrva+nZ9jyLeZPN3lt9rC+/ewg2R1zzrBVbrB4yi4+wxYfWHCe0lkvWMQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQLWcQ7bMnHFZc/t76lo7t1j4yj7IPuzc3Zewv/es2Id3j296ffn71zaL6OF6r3/JeHNY+cvf1kMr58mN5MDtb08d3EOzj7+069SbwXjxbJq37gtc5/8SS7GRc+dnx1iHdo9vfdevN4z27fv3x4vhN/1H36op/8dPbOX6LobjLB2M3utC7+/CR/cBKvZOX/FRwlxdqbtOOVI96hqYrXvsRv78YDsIktHSzTn86279rHz3d27cLpndmq6YOzz3K2Hc9EkpvFBvb5iHdwitOGbIfNzk9tjqZc2+lkkv2UPjCeFpsOpDbabK0KadPxzUHjBGNhxDs8sztsk2wcTUI2UwPz8p/+FD/wzmE23G7nBydszumD8Y+laYMz5yVerEMx3ukYaicSyU/pA87IOymuUTPyEi/WrBCvnZua2/QIV/ZT0mc85337SXpntkZNvPGM4t3j9IY5L9aiEK+dL0zPLaQ/5Y3mRxvSg8JZx1Uj71EUH5NIbzjaAN80H+d1cJwXvqk/w1bCGTZ4p+XQa6e9a0G8kEW8kLWRePfgq99/155Z+NZP65f4w/dLD378/g86PcVvv1f3yMfvxxdGXDyyNwtcOLmZeE/gjZHz9eTkmx89NV9fXHpYu/zLn5Uee/XgXpfne/nh07qHPr3yO3tM+eDacXzTebduOPGO8i8DNzpx/h2SeJt6XDbe5zcbtrw3mR4F7n5AbYPx9lBP4SlHtJsYOf8O03hfRJEdf19+EL3xNL7b/p+58zsm3m9uxI+Zn6I3zcI/j6KbJ+UV/hTfaZaM7mV3Wq/++DB/8CTZRBQvEj+3jTc7ydH9VMYmR95RIaSNpFQIdkS7idPpt+m04Y2ndoB9ceULm/HzK1+k8b78wPx06aG9sYvYm0sPXz248oX5trTCjZvZIma99M7sCdIHy7/Giyt/tyftxtc+i8/ddT+JvNFpg1PPpoZBN1jiTRRG3ht2IDQjqM3uJGnNZJnGa+LMfkpnD+YmnjZ8+mZphR8+zFaY3mm/tdGmD5Z/jxfRzb3x1pOx2VuL/w6p8+U7fcW7TEn7+/PvqXgapg2JijmvZV7pzat5HPOlLN7nSbw2SZusffBSEu/zN2tXODnJ7rTf2nWzSchJcdpgHtozw62d68ajrtfxrug13F5MPe8e53+oTc9UfFd1tCFlRsn058qR1w6g+ch7s3aF4lazcCtGXjvntX+AlF7P5nW8K9p7Sv6MpfmeDMHOkzdlyzQtxgNsOtl9ozTntTOAT5M57zc37hVXcCbJ5oH0zuwJauI1/wXsxX9cnPwpkedz3qklquoS73LPNATTpqYHD+zN8yh660O7qxW9lR9tePUgin784N7s0YZLD6eN5kcb0kPHWcdV8doN7iYnKXZ9P9qwIoVSRzP3lDHV7Vf9cV5jz6nE6+O8K1MoNW6zoV0OMvSs4QxbMd4hnmGb2ybx9qtp6HXiXeDCyfDjZdrgsb358TSQj3dem+yw+WzY8dKmtGHHC2nDjZdRV96w4uUix6AMK14ucgzKwOJd6NI0JhieGnC87acNTDD8NLB4my9yrB1imWB4aVjxzpsA1A2xxOulwOJtvMambhH3MrPqdpk2eCmseBuvbqxbxL2nMl522DwVVLyN15XXLeLewxArhXidexhitQQV7/LThiok7auw4l16h60SkwlPBRbvenCkzE/E2wLx+ol452Pa4CninYsdNl8RL2QFHW/xjbUQmqDjLb6lIUITcLxxuae0G66A47X1nnKUK2Ahx2vG3ROmDQELOt7/xV+pN1RBx8ucIWyBxTv7/qXtV+JkhJqw4i1c3Xiaf2m5EqeBxQQVb+lK83Yxuhej066UkONtFyPxygoq3vIfRbSLkWmDKpV4W+5NscM2JCrxLjAsEmPoZOJlQoqyAcXLSBwamXhXsDfFDllgVOJdybDJzCMsKvGuBPGGZUjxMm0IjGy83ecR7LCFRjZexlHoxssMdvCIF7J042XaMHiy8dpwW7xbaZs3NG3xvqjwkWy8J63eJ7rNW0m3eEdqeEk43uaPl2i7SJvPAoCfiJd4ZQnHy7Rh6JTjZYdt4BTi5bwuKinEyyFdVJKIl5NpqEK8kCURL9MGVFGIlx02VFKIt+9/I3iKeBsw5PuNeJsw2fYa8TbiMIfPBhXvAn+0SbweG1S8nacBTBu8JhTvKq6oMSNpm5V401MJOvGu5FrG0ajNSlwkqUEm3pVcRT5qtVKrDTMq929Q8Y7ardRuw8yHeycTb+20oeMQuLppA0ci+qYTb+0OW8chsMMOWzPi7ZtQvLX6qYhpQ++Id0HssPUvgHgZAodKP95Fh0CGTnn68S6MEVvdgOPlcIG68OOtnx4QrziReJeZoNZND5g2qBOJd6nSqkdYdtjkqcS7zGs804NADSBepgehUol38QI3MT1gCtILkXirP4GihQ29oSmjex9E4j1Z8M8bNvZW0syreyAT70Lvvt/hCvYlX/mJtwfEm1nqlZ9pQx9k4l3/tGGZg3H5F2yQTrxr32HjlV+NULxrxiu/HOJN8cqvh3ghi3g7YXz2CfF2w8zYI7rxdhkEVzhgckzCH7rxdhoEVzdgEq8/hONt7Kg81q6qOaYNHgk13nJlK4qXHTafCMc7ZxAs5MqAGSLdeOcNgm68xWUZPgOhG+8cTWMt43AYpONtuOqmfnSN39N3Tru8q78E5XhLVzeOWl02GS8yJ14+k0KDRLzVw+jMdeWjFhesZ4s01dv6bf2ZffRLIt7qSepCn1KRL9KQXcs/2mDm3DeNeKtf52cSa/M5VSv8KCtOtvVMOd7yftWo1Z7Wyj6TouFgHDZCId6RreJ07v8rm+6nOG1gErF5CvHacEfepbGuqyfQmkS8EmEo/I6B0Yh3/pyhd0wbNk8jXv9HNXbYeiARL6MaqijEu85RjRFTmEK8a/0HYFTXNfh4BebTqEG8xCtr8PEybdA19HhH6cm7pQJmr68fQ4/XslenL7cFhu9eaMS71qFtFX83wcS5DxrxrnNoW+jzAsoEzl8HSCTepqFtyWF5JfEy8vYhgHiXHZaTP8lcYgPMeXsiEm9zHUuOe8uPu/kXbJJGvHPq4EV7mDTibcaL9kAFEC8v2kMVQLwYKuKFrADiZdowVAHEyw7bUIUQL4fKBko03tJbnRPvIInGW5gqrG3awGzab6rxOqNtp8S69chs2msBxNveKFmvw5pznoWhuVeq8S42Jtq1Znus/WiLURxv0/MwNPdJK958pFtgyIuXPh3NDqazl/Pm95zOH3tptz9a8S410iXD7swWGj4dYJSu0LRR4u2PWLxLxWJDHOXjdqbxoy3mtsu0oUeDijf+S7OKKa/T7qhwz0zp5S1WbhAbIhZv15HOrWs0Xb08cSg/g9MucfpLK97uI93IbbcQcO0axKpCK94FzLbILlgoiLf8KPMEGaHHO9vinD9Ezr90eQi9CDze2eCWSJBB2TOBx7taTIf9ohivc9xgs2Mh8fpFMd5puMu/tW4XTBs8IxlvPgSOTjfbLvV6RTzeedceIGSS8Trz3VPiHS7FeAsnejsNvbzyB0Ux3qnOMbLPFRLteLtjjhwQ4oWsgcXLtCEkw4qXHbagDCveJdG+X4i3C2YdXgk03nWNkezv+STQeNc1RhKvT0KNdz2ZMW3wCvF22Wb+BT4INV7GyAEINF7GyCEINF4MAfFCFvFCFvFCVvjxrmHfjd1BP4Qf7zqOmnEgzgsDiHcd5ys4TewD4vVlk+hsAPEybQhV+PGywxas8ONdHq16inhbYJbgJ+Jtg/0zLxFvG8TrJeJtgWmDn4h3PnbYPEW8kEW87TECe4Z4O2Du6xfi7YKjDl4h3i6I1yvE2wHTBr8Qb3vssHmGeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCGLeCFLIV6g2lJdbSReYB2IF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7KIF7L+Dylp2/2bzMSnAAAAAElFTkSuQmCC" alt width="95%" /></p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a></span>
+<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a></span>
+<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a>absences<span class="sc">$</span>summary</span>
+<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a><span class="co">#&gt;   fold n_presences n_pseudoabsences ratio_achieved</span></span>
+<span id="cb16-5"><a href="#cb16-5" tabindex="-1"></a><span class="co">#&gt; 1    1          37               74              2</span></span>
+<span id="cb16-6"><a href="#cb16-6" tabindex="-1"></a><span class="co">#&gt; 2    2          37               74              2</span></span>
+<span id="cb16-7"><a href="#cb16-7" tabindex="-1"></a><span class="co">#&gt; 3    3          43               86              2</span></span>
+<span id="cb16-8"><a href="#cb16-8" tabindex="-1"></a><span class="co">#&gt; 4    4          33               66              2</span></span></code></pre></div>
+<p>Note that <code>variable_patterns</code> and <code>time_cols</code>
+here use both <code>year</code> and <code>season</code>. The
+pseudoabsences are stamped with year-season values just like the
+presences, and the environmental values attached to them are pulled from
+the matching time-specific raster. This consistency is what keeps the
+temporally explicit workflow intact through the model fitting step.</p>
+<p><br></p>
+</div>
+<div id="sec-outputs" class="section level1">
+<h1>Outputs ready for modeling</h1>
+<p>At this point the three key downstream inputs are in hand:</p>
+<ul>
+<li><code>scaled_dir</code> - the directory of scaled (or aligned in
+<code>rasters_aligned</code>, if scaling was skipped) rasters from which
+environmental conditions will be projected across space and time.</li>
+<li><code>partition</code> - the rarefied, fold-assigned, time explicit
+environment data from species occurrence points.</li>
+<li><code>absences</code> - the fold-stratified pseudoabsences with
+matching environmental attributes.</li>
+</ul>
+<p>These are passed directly to any of the four model builders covered
+in the following parallel vignettes:</p>
+<ul>
+<li><a href="https://cjhughes926.github.io/TemporalModelR/articles/V3a_GLM.html">Modeling
+with a GLM</a></li>
+<li><a href="https://cjhughes926.github.io/TemporalModelR/articles/V3b_GAM.html">Modeling
+with a GAM</a></li>
+<li><a href="https://cjhughes926.github.io/TemporalModelR/articles/V3c_RF.html">Modeling
+with a Random Forest</a></li>
+<li><a href="https://cjhughes926.github.io/TemporalModelR/articles/V3d_HV.html">Modeling
+with a Hypervolume</a></li>
+</ul>
+<p>Once a model is fitted, predictions are projected through space and
+time using <code>generate_spatiotemporal_predictions()</code>, and the
+resulting prediction stack is summarized in the <a href="https://cjhughes926.github.io/TemporalModelR/articles/V4_Postprocessing.html">Post-processing
+predictions</a> vignette.</p>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
