@@ -131,6 +131,23 @@
 "tmr_predictions_annual"
 
 
+#' Pre-built user_data pseudoabsences (seasonal workflow)
+#'
+#' Output of \code{\link{generate_absences}} run with
+#' \code{method = "user_data"} against \code{\link{tmr_partition}}, using
+#' \code{inst/extdata/points/synthetic_user_presences.csv} as the supplied
+#' absence locations. The CSV contains occurrence-formatted points for a
+#' 'related speecies' to that data of interest to be used as a proxy for survey
+#' effort for the species of interest, serving as an alternative method for
+#' generating pseudoabsences.
+#'
+#' @format A list as returned by \code{\link{generate_absences}}, containing
+#'   \code{$pseudoabsences} (an sf object with attached predictor columns),
+#'   \code{$plots}, and \code{$summary}.
+#'
+"tmr_absences_user"
+
+
 ### Bundled extdata --------------------------------------------------------
 
 #' Bundled rasters, point files, and prediction outputs
@@ -163,6 +180,13 @@
 #'     \code{year}, \code{season}, and \code{pres = 1}.}
 #'   \item{\code{extdata/points/synthetic_occurrence_points.shp}}{Same
 #'     points as a shapefile.}
+#'   \item{\code{extdata/points/synthetic_user_presences.csv}}{A second-species
+#'     presence dataset for demonstrating \code{method = "user_data"} in
+#'     \code{\link{generate_absences}}. Points were derived from buffer-
+#'     constrained environmental pseudoabsences of the primary species and
+#'     reformatted as presences (\code{pres = 1}). Same column structure as
+#'     \code{synthetic_occurrence_points.csv} (\code{x}, \code{y},
+#'     \code{year}, \code{season}, \code{pres}).}
 #'   \item{\code{extdata/points/extracted_seasonal_*.csv}}{Outputs from
 #'     \code{\link{temporally_explicit_extraction}} using the seasonal
 #'     predictor set: \code{_Raw_Values.csv}, \code{_Scaled_Values.csv},

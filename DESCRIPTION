@@ -1,7 +1,7 @@
 Package: TemporalModelR
 Type: Package
 Title: Temporally Explicit Species Distribution Modelling
-Version: 0.2.0
+Version: 0.3.0
 Authors@R: c(
     person(
       "Connor", "Hughes",
@@ -48,7 +48,7 @@ Language: en-US
 Config/roxygen2/version: 8.0.0
 RoxygenNote: 7.3.2
 NeedsCompilation: no
-Packaged: 2026-06-23 20:27:30 UTC; Conno
+Packaged: 2026-06-30 17:03:53 UTC; Conno
 Author: Connor Hughes [aut, cre] (ORCID:
     <https://orcid.org/0000-0002-3720-0837>),
   Mariana Castaneda-Guzman [aut] (ORCID:
@@ -56,4 +56,4 @@ Author: Connor Hughes [aut, cre] (ORCID:
   Luis E. Escobar [aut] (ORCID: <https://orcid.org/0000-0001-5735-2750>)
 Maintainer: Connor Hughes <connorhughes926@gmail.com>
 Repository: CRAN
-Date/Publication: 2026-06-30 10:40:19 UTC
+Date/Publication: 2026-07-02 07:20:24 UTC

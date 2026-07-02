@@ -178,10 +178,63 @@ absences <- generate_absences(
   ratio                    = 2,
   time_cols                = c("year", "season"),
   create_plot              = TRUE,
-  plot_by_fold = TRUE,
+  plot_by_fold             = TRUE,
   verbose                  = FALSE
 )
 
-
 absences$summary
+
+## -----------------------------------------------------------------------------
+user_pts_file <- system.file(
+  "extdata/points/synthetic_user_presences.csv",
+  package = "TemporalModelR"
+)
+
+user_pts <- utils::read.csv(user_pts_file)
+
+head(user_pts)
+
+nrow(user_pts)
+
+## -----------------------------------------------------------------------------
+user_rare_dir <- file.path(tempdir(), "rarefied_user")
+
+user_rare_out <- spatiotemporal_rarefaction(
+  points_sp        = user_pts_file,
+  output_dir       = user_rare_dir,
+  reference_raster = ref_file,
+  time_cols        = c("year", "season"),
+  xcol             = "x",
+  ycol             = "y",
+  points_crs       = study_crs,
+  output_prefix    = "Pts_user",
+  verbose          = FALSE
+)
+
+user_rare_out$input_points
+
+user_rare_out$spatiotemporal_points
+
+## -----------------------------------------------------------------------------
+absences_user <- generate_absences(
+  partition_result         = partition,
+  reference_shapefile_path = study_area_sf,
+  raster_dir               = scaled_dir,
+  variable_patterns        = c(
+    "elevation"    = "elevation",
+    "forest_cover" = "forest_cover_YEAR",
+    "prseas"       = "prseas_YEAR_SEASON"
+  ),
+  method                   = "user_data",
+  user_absence_data        = user_rare_out$files_created$spatiotemporal,
+  xcol                     = "X",
+  ycol                     = "Y",
+  points_crs               = study_crs,
+  time_cols                = c("year", "season"),
+  create_plot              = TRUE,
+  plot_by_fold             = TRUE,
+  verbose                  = FALSE
+)
+
+absences_user$summary
 

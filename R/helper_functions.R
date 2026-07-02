@@ -11,8 +11,6 @@
                      character(1)))]
 }
 
-### Changepoint helpers (used by classify_pixel_with_times)
-
 #' @keywords internal
 #' @noRd
 #' @importFrom sf sf_use_s2 st_as_sf st_as_sfc st_bbox st_buffer st_cast
@@ -217,7 +215,8 @@
 #' @keywords internal
 #' @noRd
 .classify_pixel_with_times <- function(pixel_vals, n_middle, time_steps,
-                                       alpha = 0.05, n_perm = 1000, use_neighbor = TRUE) {
+                                       fastcpd_params = list(), alpha = 0.05,
+                                       n_perm = 1000, use_neighbor = TRUE) {
 
   y <- pixel_vals[1:n_middle]
   lag <- pixel_vals[(n_middle + 1):(2 * n_middle)]
@@ -239,7 +238,10 @@
   data_matrix <- if (use_neighbor) cbind(y, lag, neighbor) else cbind(y, lag)
 
   cp_result <- tryCatch({
-    suppressWarnings(fastcpd::fastcpd.binomial(data = data_matrix, r.progress = FALSE))
+    suppressWarnings(do.call(
+      fastcpd::fastcpd.binomial,
+      c(list(data = data_matrix, r.progress = FALSE), fastcpd_params)
+    ))
   }, error = function(e) NULL)
 
   if (is.null(cp_result)) return(c(7, NA, NA))
@@ -542,7 +544,6 @@
   coords              <- sf::st_coordinates(pts_work)
   n_pts  <- nrow(coords)
 
-  ### Spatial-only mode: kd-split then centroid reassignment
   if (n_spatial_folds > 0 && n_temporal_folds == 0) {
 
     target_size  <- floor(n_pts / n_spatial_folds)
@@ -593,7 +594,6 @@
   group_vec <- integer(n_pts)
   for (g in seq_along(groups)) group_vec[groups[[g]]] <- g
 
-  ### Centroid reassignment to clean up kd-split boundaries
   group_centroids <- do.call(rbind, lapply(seq_len(n_groups), function(g) {
     idx <- which(group_vec == g)
     if (length(idx) == 0) return(c(NA_real_, NA_real_))
@@ -612,7 +612,6 @@
     group_vec <- apply(dist_to_groups, 1, which.min)
   }
 
-  ### Rebalance all groups to equal target sizes
   for (iter in seq_len(n_pts * 2)) {
     counts <- tabulate(group_vec, nbins = n_groups)
     over   <- which(counts > group_target_sizes)
@@ -742,7 +741,6 @@
     }
   }
 
-  ### Catch any remaining unassigned points
   still_na <- which(is.na(pts_work$fold))
   if (length(still_na) > 0) {
     counts_all <- tabulate(pts_work$fold[!is.na(pts_work$fold)], nbins = total_folds)
@@ -818,6 +816,226 @@
 
 #' @keywords internal
 #' @noRd
+.build_fold_polygons <- function(pts_sf, reference_shapefile, total_folds, partition_mode) {
+
+  if (is.null(reference_shapefile) || partition_mode == "random") return(NULL)
+
+  pts_coords_map <- sf::st_coordinates(pts_sf)
+  fold_vec_pts   <- pts_sf$fold
+  ref_sf_union   <- sf::st_union(reference_shapefile)
+  bbox           <- sf::st_bbox(reference_shapefile)
+
+  is_temporal_mode <- partition_mode %in% c("spatiotemporal", "balanced", "temporal_only")
+
+  if (is_temporal_mode && "block_type" %in% names(pts_sf)) {
+    pts_df_bt <- sf::st_drop_geometry(pts_sf)
+    spatial_folds <- sort(unique(pts_df_bt$fold[
+      pts_df_bt$block_type %in% c("spatial_exclusive", "rebalanced")
+    ]))
+    temporal_folds <- sort(unique(pts_df_bt$fold[
+      pts_df_bt$block_type == "temporal_exclusive"
+    ]))
+    fold_vec_render <- fold_vec_pts
+    fold_vec_render[fold_vec_pts %in% temporal_folds] <- total_folds + 1
+    render_folds <- as.integer(c(spatial_folds, total_folds + 1))
+  } else {
+    spatial_folds   <- as.integer(seq_len(total_folds))
+    temporal_folds  <- integer(0)
+    fold_vec_render <- fold_vec_pts
+    render_folds    <- as.integer(seq_len(total_folds))
+  }
+
+  max_render_idx <- max(render_folds)
+  fold_mcps      <- vector("list", max_render_idx)
+  valid_render   <- integer(0)
+
+  for (f in render_folds) {
+    fold_pts <- pts_coords_map[fold_vec_render == f, , drop = FALSE]
+    if (nrow(fold_pts) == 0) next
+    fold_sfc <- sf::st_as_sf(as.data.frame(fold_pts), coords = c("X", "Y"),
+                             crs = sf::st_crs(pts_sf))
+    fold_mcps[[f]] <- if (nrow(fold_pts) >= 3) {
+      sf::st_convex_hull(sf::st_union(fold_sfc))
+    } else {
+      sf::st_buffer(sf::st_union(fold_sfc), dist = 1e-6)
+    }
+    valid_render <- c(valid_render, f)
+  }
+  valid_render <- as.integer(valid_render)
+
+  fold_real_pts <- lapply(seq_len(max_render_idx), function(f) {
+    if (!f %in% valid_render) return(NULL)
+    fold_pts <- pts_coords_map[fold_vec_render == f, , drop = FALSE]
+    if (nrow(fold_pts) == 0) return(NULL)
+    sf::st_as_sf(as.data.frame(fold_pts), coords = c("X", "Y"),
+                 crs = sf::st_crs(pts_sf))
+  })
+
+  set.seed(42)
+  sample_pts <- sf::st_sample(ref_sf_union, size = 1000, type = "random")
+  sample_pts <- sf::st_as_sf(sample_pts)
+  sample_pts <- sample_pts[!sf::st_is_empty(sample_pts), ]
+  sample_xy  <- sf::st_coordinates(sample_pts)
+  n_sample   <- nrow(sample_xy)
+
+  mcp_geoms      <- do.call(c, lapply(valid_render, function(f) fold_mcps[[f]]))
+  contain_sparse <- suppressMessages(suppressWarnings(
+    sf::st_intersects(sample_pts, mcp_geoms, sparse = TRUE)
+  ))
+
+  n_hits      <- lengths(contain_sparse)
+  idx_one     <- which(n_hits == 1)
+  idx_multi   <- which(n_hits > 1)
+  idx_outside <- which(n_hits == 0)
+  sample_fold <- integer(n_sample)
+
+  if (length(idx_one) > 0) {
+    sample_fold[idx_one] <- valid_render[vapply(contain_sparse[idx_one],
+                                                `[[`, integer(1), 1)]
+  }
+
+  if (length(idx_multi) > 0) {
+    sample_fold[idx_multi] <- vapply(idx_multi, function(i) {
+      hit_folds <- valid_render[contain_sparse[[i]]]
+      best_fold <- hit_folds[1]
+      best_dist <- Inf
+      pt_i      <- sample_pts[i, ]
+      for (hf in hit_folds) {
+        if (is.null(fold_real_pts[[hf]])) next
+        d <- min(as.numeric(sf::st_distance(pt_i, fold_real_pts[[hf]])))
+        if (d < best_dist) {
+          best_dist <- d
+          best_fold <- hf
+        }
+      }
+      as.integer(best_fold)
+    }, integer(1))
+  }
+
+  if (length(idx_outside) > 0) {
+    dist_mat <- suppressMessages(suppressWarnings(
+      sf::st_distance(sample_pts[idx_outside, ], mcp_geoms)
+    ))
+    nearest_col              <- apply(dist_mat, 1, which.min)
+    sample_fold[idx_outside] <- valid_render[nearest_col]
+  }
+
+  sample_assigned <- sf::st_as_sf(
+    data.frame(fold = sample_fold, sample_xy),
+    coords = c("X", "Y"), crs = sf::st_crs(pts_sf)
+  )
+
+  s2_state <- sf::sf_use_s2()
+  suppressMessages(sf::sf_use_s2(FALSE))
+  vor_raw <- tryCatch({
+    suppressMessages(suppressWarnings(
+      sf::st_voronoi(sf::st_union(sample_assigned),
+                     envelope = sf::st_as_sfc(bbox))
+    ))
+  }, error = function(e) NULL)
+  suppressMessages(sf::sf_use_s2(s2_state))
+
+  if (is.null(vor_raw)) return(NULL)
+
+  vor_polys <- sf::st_collection_extract(vor_raw, "POLYGON")
+  vor_sf    <- sf::st_sf(geometry = vor_polys, crs = sf::st_crs(pts_sf))
+
+  joined <- suppressMessages(suppressWarnings(
+    sf::st_join(vor_sf, sample_assigned, join = sf::st_contains)
+  ))
+
+  real_pts_render <- sf::st_as_sf(
+    data.frame(fold = fold_vec_render, pts_coords_map),
+    coords = c("X", "Y"), crs = sf::st_crs(pts_sf)
+  )
+
+  sentinel     <- total_folds + 1
+  orphan_geoms <- NULL
+  keep_list    <- list()
+
+  unique_render_folds <- unique(joined$fold[!is.na(joined$fold)])
+
+  for (f in unique_render_folds) {
+    sub <- joined[!is.na(joined$fold) & joined$fold == f, ]
+    if (nrow(sub) == 0) next
+
+    merged  <- suppressWarnings(sf::st_union(sub))
+    clipped <- suppressWarnings(sf::st_intersection(merged, ref_sf_union))
+    clipped <- clipped[!sf::st_is_empty(clipped)]
+    if (length(clipped) == 0) next
+
+    parts_sf <- suppressWarnings(
+      sf::st_cast(sf::st_sf(fold = f, geometry = clipped), "POLYGON")
+    )
+    parts_sf <- parts_sf[!sf::st_is_empty(parts_sf), ]
+    if (nrow(parts_sf) == 0) next
+
+    if (f %in% spatial_folds) {
+      fold_real <- real_pts_render[real_pts_render$fold == f, ]
+
+      if (nrow(fold_real) == 0) {
+        orphan_geoms <- c(orphan_geoms, sf::st_geometry(parts_sf))
+        next
+      }
+
+      bbox_diag <- sqrt((bbox["xmax"] - bbox["xmin"])^2 +
+                          (bbox["ymax"] - bbox["ymin"])^2)
+      proximity_threshold <- bbox_diag * 0.001
+
+      part_min_dists <- vapply(seq_len(nrow(parts_sf)), function(p) {
+        suppressMessages(suppressWarnings(
+          min(as.numeric(sf::st_distance(fold_real, parts_sf[p, ])))
+        ))
+      }, numeric(1))
+
+      keep_mask <- part_min_dists <= proximity_threshold
+
+      if (any(keep_mask)) {
+        kept_geom <- suppressWarnings(sf::st_union(parts_sf[keep_mask, ]))
+        keep_list[[length(keep_list) + 1]] <- sf::st_sf(
+          fold     = f,
+          geometry = sf::st_sfc(kept_geom, crs = sf::st_crs(pts_sf))
+        )
+      }
+      if (any(!keep_mask)) {
+        orphan_geoms <- c(orphan_geoms, sf::st_geometry(parts_sf[!keep_mask, ]))
+      }
+
+    } else {
+      keep_list[[length(keep_list) + 1]] <- sf::st_sf(
+        fold     = f,
+        geometry = sf::st_sfc(suppressWarnings(sf::st_union(parts_sf)),
+                              crs = sf::st_crs(pts_sf))
+      )
+    }
+  }
+
+  dissolved <- if (length(keep_list) > 0) do.call(rbind, keep_list) else NULL
+
+  if (!is.null(orphan_geoms) && length(orphan_geoms) > 0 &&
+      length(temporal_folds) > 0 && !is.null(dissolved)) {
+    orphan_sfc <- sf::st_sfc(orphan_geoms, crs = sf::st_crs(pts_sf))
+    existing_t <- dissolved[!is.na(dissolved$fold) & dissolved$fold == sentinel, ]
+    if (nrow(existing_t) > 0) {
+      merged_t <- suppressWarnings(
+        sf::st_union(c(sf::st_geometry(existing_t), orphan_sfc))
+      )
+      dissolved <- dissolved[is.na(dissolved$fold) | dissolved$fold != sentinel, ]
+    } else {
+      merged_t <- suppressWarnings(sf::st_union(orphan_sfc))
+    }
+    dissolved <- rbind(
+      dissolved,
+      sf::st_sf(fold     = sentinel,
+                geometry = sf::st_sfc(merged_t, crs = sf::st_crs(pts_sf)))
+    )
+  }
+
+  dissolved
+}
+
+#' @keywords internal
+#' @noRd
 .plot_partitions_base <- function(pts_sf, reference_shapefile, final_fold_counts,
                                   mean_per_fold, total_folds, partition_mode,
                                   time_cols, temporal_partitioning, n_temporal,
@@ -873,237 +1091,39 @@
 
     if (partition_mode != "random") {
 
-      pts_coords_map <- sf::st_coordinates(pts_sf)
-      fold_vec_pts   <- pts_sf$fold
-      ref_sf_union   <- sf::st_union(reference_shapefile)
-      bbox           <- sf::st_bbox(reference_shapefile)
+      dissolved <- .build_fold_polygons(pts_sf, reference_shapefile, total_folds, partition_mode)
 
-      ### Identify render groups  -  temporal folds collapsed to sentinel
       is_temporal_mode <- partition_mode %in% c("spatiotemporal", "balanced", "temporal_only")
 
       if (is_temporal_mode && "block_type" %in% names(pts_sf)) {
-        pts_df_bt <- sf::st_drop_geometry(pts_sf)
-        spatial_folds <- sort(unique(pts_df_bt$fold[
+        pts_df_bt      <- sf::st_drop_geometry(pts_sf)
+        spatial_folds  <- sort(unique(pts_df_bt$fold[
           pts_df_bt$block_type %in% c("spatial_exclusive", "rebalanced")
         ]))
         temporal_folds <- sort(unique(pts_df_bt$fold[
           pts_df_bt$block_type == "temporal_exclusive"
         ]))
-        fold_vec_render <- fold_vec_pts
-        fold_vec_render[fold_vec_pts %in% temporal_folds] <- total_folds + 1
-        render_folds <- as.integer(c(spatial_folds, total_folds + 1))
       } else {
-        spatial_folds   <- as.integer(seq_len(total_folds))
-        temporal_folds  <- integer(0)
-        fold_vec_render <- fold_vec_pts
-        render_folds    <- as.integer(seq_len(total_folds))
+        spatial_folds  <- as.integer(seq_len(total_folds))
+        temporal_folds <- integer(0)
       }
+      sentinel <- total_folds + 1
 
-      ### Build MCP (convex hull) per render group from real points
-      max_render_idx <- max(render_folds)
-      fold_mcps      <- vector("list", max_render_idx)
-      valid_render   <- integer(0)
-
-      for (f in render_folds) {
-        fold_pts <- pts_coords_map[fold_vec_render == f, , drop = FALSE]
-        if (nrow(fold_pts) == 0) next
-        fold_sfc <- sf::st_as_sf(as.data.frame(fold_pts), coords = c("X", "Y"),
-                                 crs = sf::st_crs(pts_sf))
-        fold_mcps[[f]] <- if (nrow(fold_pts) >= 3) {
-          sf::st_convex_hull(sf::st_union(fold_sfc))
-        } else {
-          sf::st_buffer(sf::st_union(fold_sfc), dist = 1e-6)
-        }
-        valid_render <- c(valid_render, f)
-      }
-      valid_render <- as.integer(valid_render)
-
-      ### Build real points sf per render group for overlap tie-breaking
-      fold_real_pts <- lapply(seq_len(max_render_idx), function(f) {
-        if (!f %in% valid_render) return(NULL)
-        fold_pts <- pts_coords_map[fold_vec_render == f, , drop = FALSE]
-        if (nrow(fold_pts) == 0) return(NULL)
-        sf::st_as_sf(as.data.frame(fold_pts), coords = c("X", "Y"),
-                     crs = sf::st_crs(pts_sf))
-      })
-
-      set.seed(42)
-      sample_pts <- sf::st_sample(ref_sf_union, size = 1000, type = "random")
-      sample_pts <- sf::st_as_sf(sample_pts)
-      sample_pts <- sample_pts[!sf::st_is_empty(sample_pts), ]
-      sample_xy  <- sf::st_coordinates(sample_pts)
-      n_sample   <- nrow(sample_xy)
-
-      mcp_geoms      <- do.call(c, lapply(valid_render, function(f) fold_mcps[[f]]))
-      contain_sparse <- suppressMessages(suppressWarnings(
-        sf::st_intersects(sample_pts, mcp_geoms, sparse = TRUE)
-      ))
-
-      n_hits      <- lengths(contain_sparse)
-      idx_one     <- which(n_hits == 1)
-      idx_multi   <- which(n_hits > 1)
-      idx_outside <- which(n_hits == 0)
-      sample_fold <- integer(n_sample)
-
-      if (length(idx_one) > 0) {
-        sample_fold[idx_one] <- valid_render[vapply(contain_sparse[idx_one],
-                                                    `[[`, integer(1), 1)]
-      }
-
-      if (length(idx_multi) > 0) {
-        sample_fold[idx_multi] <- vapply(idx_multi, function(i) {
-          hit_folds <- valid_render[contain_sparse[[i]]]
-          best_fold <- hit_folds[1]
-          best_dist <- Inf
-          pt_i      <- sample_pts[i, ]
-          for (hf in hit_folds) {
-            if (is.null(fold_real_pts[[hf]])) next
-            d <- min(as.numeric(sf::st_distance(pt_i, fold_real_pts[[hf]])))
-            if (d < best_dist) {
-              best_dist <- d
-              best_fold <- hf
-            }
-          }
-          as.integer(best_fold)
-        }, integer(1))
-      }
-
-      if (length(idx_outside) > 0) {
-        dist_mat <- suppressMessages(suppressWarnings(
-          sf::st_distance(sample_pts[idx_outside, ], mcp_geoms)
-        ))
-        nearest_col              <- apply(dist_mat, 1, which.min)
-        sample_fold[idx_outside] <- valid_render[nearest_col]
-      }
-
-      ### Build Voronoi from the 1000 classified sample points
-      sample_assigned <- sf::st_as_sf(
-        data.frame(fold = sample_fold, sample_xy),
-        coords = c("X", "Y"), crs = sf::st_crs(pts_sf)
-      )
-
-      s2_state <- sf::sf_use_s2()
-      sf::sf_use_s2(FALSE)
-      vor_raw <- tryCatch({
-        suppressMessages(suppressWarnings(
-          sf::st_voronoi(sf::st_union(sample_assigned),
-                         envelope = sf::st_as_sfc(bbox))
-        ))
-      }, error = function(e) NULL)
-      sf::sf_use_s2(s2_state)
-
-      if (!is.null(vor_raw)) {
-        vor_polys <- sf::st_collection_extract(vor_raw, "POLYGON")
-        vor_sf    <- sf::st_sf(geometry = vor_polys, crs = sf::st_crs(pts_sf))
-
-        joined <- suppressMessages(suppressWarnings(
-          sf::st_join(vor_sf, sample_assigned, join = sf::st_contains)
-        ))
-
-        ### Build real points sf with render fold labels for proximity checks
-        real_pts_render <- sf::st_as_sf(
-          data.frame(fold = fold_vec_render, pts_coords_map),
-          coords = c("X", "Y"), crs = sf::st_crs(pts_sf)
-        )
-
-        sentinel     <- total_folds + 1
-        orphan_geoms <- NULL
-        keep_list    <- list()
-
-        unique_render_folds <- unique(joined$fold[!is.na(joined$fold)])
-
-        for (f in unique_render_folds) {
-          sub <- joined[!is.na(joined$fold) & joined$fold == f, ]
+      if (!is.null(dissolved)) {
+        for (f in spatial_folds) {
+          sub <- dissolved[!is.na(dissolved$fold) & dissolved$fold == f, ]
           if (nrow(sub) == 0) next
-
-          merged  <- suppressWarnings(sf::st_union(sub))
-          clipped <- suppressWarnings(sf::st_intersection(merged, ref_sf_union))
-          clipped <- clipped[!sf::st_is_empty(clipped)]
-          if (length(clipped) == 0) next
-
-          parts_sf <- suppressWarnings(
-            sf::st_cast(sf::st_sf(fold = f, geometry = clipped), "POLYGON")
-          )
-          parts_sf <- parts_sf[!sf::st_is_empty(parts_sf), ]
-          if (nrow(parts_sf) == 0) next
-
-          if (f %in% spatial_folds) {
-            fold_real <- real_pts_render[real_pts_render$fold == f, ]
-
-            if (nrow(fold_real) == 0) {
-              orphan_geoms <- c(orphan_geoms, sf::st_geometry(parts_sf))
-              next
-            }
-
-            bbox_diag <- sqrt((bbox["xmax"] - bbox["xmin"])^2 +
-                                (bbox["ymax"] - bbox["ymin"])^2)
-            proximity_threshold <- bbox_diag * 0.001
-
-            part_min_dists <- vapply(seq_len(nrow(parts_sf)), function(p) {
-              suppressMessages(suppressWarnings(
-                min(as.numeric(sf::st_distance(fold_real, parts_sf[p, ])))
-              ))
-            }, numeric(1))
-
-            keep_mask <- part_min_dists <= proximity_threshold
-
-            if (any(keep_mask)) {
-              kept_geom <- suppressWarnings(sf::st_union(parts_sf[keep_mask, ]))
-              keep_list[[length(keep_list) + 1]] <- sf::st_sf(
-                fold     = f,
-                geometry = sf::st_sfc(kept_geom, crs = sf::st_crs(pts_sf))
-              )
-            }
-            if (any(!keep_mask)) {
-              orphan_geoms <- c(orphan_geoms, sf::st_geometry(parts_sf[!keep_mask, ]))
-            }
-
-          } else {
-            keep_list[[length(keep_list) + 1]] <- sf::st_sf(
-              fold     = f,
-              geometry = sf::st_sfc(suppressWarnings(sf::st_union(parts_sf)),
-                                    crs = sf::st_crs(pts_sf))
-            )
-          }
+          graphics::plot(sf::st_geometry(sub), add = TRUE,
+                         col = grDevices::adjustcolor(fold_colors[f], alpha.f = 0.25),
+                         border = fold_colors[f], lwd = 0.8)
         }
 
-        dissolved <- if (length(keep_list) > 0) do.call(rbind, keep_list) else NULL
-
-        if (!is.null(orphan_geoms) && length(orphan_geoms) > 0 &&
-            length(temporal_folds) > 0 && !is.null(dissolved)) {
-          orphan_sfc <- sf::st_sfc(orphan_geoms, crs = sf::st_crs(pts_sf))
-          existing_t <- dissolved[!is.na(dissolved$fold) & dissolved$fold == sentinel, ]
-          if (nrow(existing_t) > 0) {
-            merged_t <- suppressWarnings(
-              sf::st_union(c(sf::st_geometry(existing_t), orphan_sfc))
-            )
-            dissolved <- dissolved[is.na(dissolved$fold) | dissolved$fold != sentinel, ]
-          } else {
-            merged_t <- suppressWarnings(sf::st_union(orphan_sfc))
-          }
-          dissolved <- rbind(
-            dissolved,
-            sf::st_sf(fold     = sentinel,
-                      geometry = sf::st_sfc(merged_t, crs = sf::st_crs(pts_sf)))
-          )
-        }
-
-        if (!is.null(dissolved)) {
-          for (f in spatial_folds) {
-            sub <- dissolved[!is.na(dissolved$fold) & dissolved$fold == f, ]
-            if (nrow(sub) == 0) next
-            graphics::plot(sf::st_geometry(sub), add = TRUE,
-                           col = grDevices::adjustcolor(fold_colors[f], alpha.f = 0.25),
-                           border = fold_colors[f], lwd = 0.8)
-          }
-
-          if (length(temporal_folds) > 0) {
-            sub_t <- dissolved[!is.na(dissolved$fold) & dissolved$fold == sentinel, ]
-            if (nrow(sub_t) > 0) {
-              graphics::plot(sf::st_geometry(sub_t), add = TRUE,
-                             col = grDevices::adjustcolor("gray60", alpha.f = 0.20),
-                             border = "gray50", lwd = 0.8, lty = 2)
-            }
+        if (length(temporal_folds) > 0) {
+          sub_t <- dissolved[!is.na(dissolved$fold) & dissolved$fold == sentinel, ]
+          if (nrow(sub_t) > 0) {
+            graphics::plot(sf::st_geometry(sub_t), add = TRUE,
+                           col = grDevices::adjustcolor("gray60", alpha.f = 0.20),
+                           border = "gray50", lwd = 0.8, lty = 2)
           }
         }
       }
@@ -1131,7 +1151,7 @@
     plot_list$combined <- grDevices::recordPlot()
   }
 
-  plot_list
+  list(plots = plot_list, fold_polygons = if (exists("dissolved")) dissolved else NULL)
 }
 
 #' @keywords internal
@@ -1143,6 +1163,7 @@
                                     use_random, n_spatial_folds, n_temporal_folds,
                                     n_balanced_folds, n_random_folds,
                                     n_removed, n_original, plot_list, output_file,
+                                    reference_shapefile = NULL,
                                     verbose = TRUE) {
 
   total_points <- nrow(pts_sf)
@@ -1174,10 +1195,12 @@
   internal_cols <- c("spatial_block", "temporal_block", "block_type")
   pts_sf_public <- pts_sf[, !names(pts_sf) %in% internal_cols, drop = FALSE]
 
+  fold_polygons <- .build_fold_polygons(pts_sf, reference_shapefile, total_folds, partition_mode)
+
   results <- list(
     folds         = sf::st_drop_geometry(pts_sf)[, "fold", drop = FALSE],
     points_sf     = pts_sf_public,
-    voronoi_folds = voronoi_sf,
+    voronoi_folds = if (!is.null(fold_polygons)) fold_polygons else voronoi_sf,
     summary       = summary_stats,
     plots         = plot_list
   )
@@ -1198,7 +1221,7 @@
                                    ts_x_rng, ts_y_max, x_ticks) {
   right_mar <- max(2, ceiling(max(nchar(all_units)) / 2.5) + 1)
   opar <- graphics::par(no.readonly = TRUE)
-  on.exit(graphics::par(opar))
+  on.exit(graphics::par(opar), add = TRUE)
   graphics::par(mar = c(4, 7.5, 3.5, right_mar),
                 mgp = c(1.8, 0.7, 0))
   graphics::plot(NULL,
@@ -1230,10 +1253,9 @@
 
 #' @keywords internal
 #' @noRd
-### Cross-unit time-step bar plot of gains (positive) and losses (negative).
 .plot_trend_change_per_step <- function(gain_v, loss_v, yrs_chg, ac_ylim) {
   opar <- graphics::par(no.readonly = TRUE)
-  on.exit(graphics::par(opar))
+  on.exit(graphics::par(opar), add = TRUE)
   graphics::par(mar = c(5, 8, 3.5, 2),
                 mgp = c(1.8, 0.7, 0))
   graphics::barplot(gain_v,
@@ -1259,11 +1281,10 @@
 
 #' @keywords internal
 #' @noRd
-### Horizontal bar plot of total gains and losses per spatial unit across the
 .plot_trend_total_unit <- function(g_tot, l_tot, shared_units, time_steps, tcu_ymax) {
   left_mar <- max(4, ceiling(max(nchar(shared_units)) / 2.5))
   opar <- graphics::par(no.readonly = TRUE)
-  on.exit(graphics::par(opar))
+  on.exit(graphics::par(opar), add = TRUE)
   graphics::par(mar = c(4, left_mar, 3.5, 1),
                 mgp = c(1.8, 0.7, 0))
 
@@ -1292,7 +1313,7 @@
 #' @noRd
 .plot_trend_facet_units <- function(change_by_timestep, all_units, n_rows, n_cols) {
   opar <- graphics::par(no.readonly = TRUE)
-  on.exit(graphics::par(opar))
+  on.exit(graphics::par(opar), add = TRUE)
   graphics::par(mfrow = c(n_rows, n_cols),
                 mar   = c(3.5, 7, 2.5, 0.5),
                 oma   = c(0, 0, 3, 0),
@@ -2001,7 +2022,6 @@
   if (n_pres > 0 || has_pa) {
 
     if (has_pa) {
-      ### Predict directly at presence + pseudoabsence points for precision
 
       pr_df <- sf::st_drop_geometry(test_pts_time)
       pa_df <- sf::st_drop_geometry(pseudo_pts_time)
@@ -2115,14 +2135,14 @@
       matches <- all_files[grepl(fname, basename(all_files), ignore.case = TRUE)]
     }
     if (length(matches) == 0) {
-      warning(paste0("Missing raster file for dynamic variable \'", var,
-                     "\' matching pattern \'", fname, "\'."))
+      warning(paste0("Missing raster file for dynamic variable '", var,
+                     "' matching pattern '", fname, "'."))
       return(NULL)
     }
     if (length(matches) > 1) {
       stop(paste0(
-        "ERROR: Multiple raster files found for dynamic variable \'", var,
-        "\' matching pattern \'", fname, "\'.",
+        "ERROR: Multiple raster files found for dynamic variable '", var,
+        "' matching pattern '", fname, "'.",
         "\nMatching files:\n", paste(matches, collapse = "\n")
       ))
     }
@@ -2133,14 +2153,14 @@
     fname   <- variable_patterns[[var]]
     matches <- all_files[grepl(fname, basename(all_files), ignore.case = TRUE)]
     if (length(matches) == 0) {
-      warning(paste0("Missing raster file for static variable \'", var,
-                     "\' matching pattern \'", fname, "\'."))
+      warning(paste0("Missing raster file for static variable '", var,
+                     "' matching pattern '", fname, "'."))
       return(NULL)
     }
     if (length(matches) > 1) {
       stop(paste0(
-        "ERROR: Multiple raster files found for static variable \'", var,
-        "\' matching pattern \'", fname, "\'.",
+        "ERROR: Multiple raster files found for static variable '", var,
+        "' matching pattern '", fname, "'.",
         "\nMatching files:\n", paste(matches, collapse = "\n")
       ))
     }
@@ -2182,7 +2202,6 @@
 
 #' @keywords internal
 #' @noRd
-### prevents "forest_cover_1" matching "forest_cover_10", "forest_cover_11", etc.
 .bstart_match <- function(nms, pfx) {
   which(startsWith(nms, pfx) &
           (nchar(nms) == nchar(pfx) |
@@ -2323,7 +2342,8 @@
 #' @noRd
 .new_plot <- function(y_vals, y_ref_vals = NULL, title, ylab,
                       x_lim, x_axis_label, x_tck, x_labels_attr,
-                      y_floor = NULL, y_ceil = NULL, right_mar = 12) {
+                      y_floor = NULL, y_ceil = NULL, right_mar = 12,
+                      draw_fn = NULL) {
   all_y <- c(y_vals, y_ref_vals)
   y_rng <- range(all_y, na.rm = TRUE)
   y_pad <- diff(y_rng) * 0.08
@@ -2347,6 +2367,7 @@
                    xlab = x_axis_label, ylab = ylab, main = title, las = 1, xaxt = "n")
   }
   .draw_xaxis(x_tck, x_labels_attr)
+  if (!is.null(draw_fn)) draw_fn()
 }
 
 #' @keywords internal
@@ -2357,7 +2378,6 @@
                                y_floor = NULL, y_ceil = NULL) {
   n_combos <- nrow(secondary_combos)
 
-  ### Collect all metric values across combos to compute a shared y-range.
   all_y <- numeric(0)
   for (ci in seq_len(n_combos)) {
     combo <- secondary_combos[ci, , drop = FALSE]
@@ -2403,7 +2423,6 @@
   }
   graphics::mtext(paste(title_prefix, "by", paste(secondary_cols, collapse = "/")),
                   side = 3, outer = TRUE, line = 1, cex = 1, font = 2)
-  graphics::par(mfrow = c(1, 1), oma = c(0, 0, 0, 0))
 }
 
 #' @keywords internal
@@ -2440,7 +2459,6 @@
   old_xpd <- graphics::par(xpd = NA)
   on.exit(graphics::par(xpd = old_xpd$xpd), add = TRUE)
 
-  ### Fill-only legend for the mean bars
   graphics::legend(
     x         = x_leg,
     y         = y_leg,
